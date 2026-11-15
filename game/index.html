@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KESTREL FOUNDRY — a round-based tactical FPS</title>
+<style>
+  :root{
+    --amber:#ffb454; --amber-dim:#8a5f24; --teal:#39d3c0; --ink:#0b0e12;
+    --panel:rgba(10,14,18,.82); --line:rgba(255,180,84,.35); --good:#7ee081; --bad:#ff6b5e;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0b0e12;
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;color:#e8e4da}
+  #app{position:fixed;inset:0}
+  canvas{display:block}
+  .hidden{display:none !important}
+
+  /* ---------- generic panel ---------- */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;
+    box-shadow:0 6px 30px rgba(0,0,0,.5);backdrop-filter:blur(3px)}
+
+  /* ---------- title / help ---------- */
+  #title{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at 50% 35%,rgba(20,28,38,.25),rgba(5,7,10,.88) 75%);z-index:40;text-align:center}
+  #title h1{font-size:54px;letter-spacing:.22em;font-weight:800;color:#f5efe2;
+    text-shadow:0 0 26px rgba(255,180,84,.35)}
+  #title h1 span{color:var(--amber)}
+  #title .sub{margin-top:6px;font-size:15px;letter-spacing:.34em;color:var(--teal);text-transform:uppercase}
+  #title .blurb{margin-top:22px;max-width:560px;font-size:15px;line-height:1.55;color:#cfc9ba}
+  #title .keys{margin-top:18px;font-size:13px;line-height:1.9;color:#9d968a}
+  #title .keys b{color:#f0e9d8;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);
+    border-radius:4px;padding:0 7px;font-weight:600}
+  #playBtn{margin-top:26px;font-size:17px;letter-spacing:.18em;font-weight:700;color:#14100a;
+    background:linear-gradient(180deg,#ffc26e,#f39c2c);border:0;border-radius:6px;padding:13px 42px;cursor:pointer;
+    box-shadow:0 4px 22px rgba(243,156,44,.45)}
+  #playBtn:hover{filter:brightness(1.08)}
+
+  /* ---------- HUD ---------- */
+  #hud{position:absolute;inset:0;pointer-events:none;z-index:20}
+  #crosshair{position:absolute;left:50%;top:50%;width:22px;height:22px;transform:translate(-50%,-50%)}
+  #crosshair:before,#crosshair:after{content:"";position:absolute;background:rgba(240,240,230,.92);
+    box-shadow:0 0 3px rgba(0,0,0,.9)}
+  #crosshair:before{left:50%;top:0;width:2px;height:100%;transform:translateX(-50%);
+    clip-path:polygon(0 0,100% 0,100% 32%,0 32%,0 68%,100% 68%,100% 100%,0 100%)}
+  #crosshair:after{top:50%;left:0;height:2px;width:100%;transform:translateY(-50%);
+    clip-path:polygon(0 0,32% 0,32% 100%,0 100%,68% 0,100% 0,100% 100%,68% 100%)}
+  #hitmarker{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(45deg);
+    width:16px;height:16px;opacity:0}
+  #hitmarker:before,#hitmarker:after{content:"";position:absolute;background:#ffd98a;box-shadow:0 0 4px #000}
+  #hitmarker:before{left:50%;top:0;width:2px;height:100%;transform:translateX(-50%)}
+  #hitmarker:after{top:50%;left:0;height:2px;width:100%;transform:translateY(-50%)}
+  #dmgVin{position:absolute;inset:0;box-shadow:inset 0 0 140px rgba(200,30,10,.55);opacity:0;transition:opacity .12s}
+
+  #topbar{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;align-items:stretch;gap:0;
+    overflow:hidden;border-radius:6px}
+  #topbar .cell{padding:7px 16px;text-align:center;background:var(--panel);border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line)}
+  #topbar .cell:first-child{border-left:1px solid var(--line);border-radius:6px 0 0 6px}
+  #topbar .cell:last-child{border-right:1px solid var(--line);border-radius:0 6px 6px 0}
+  #topbar .lab{font-size:10px;letter-spacing:.22em;color:#a49c8b;text-transform:uppercase}
+  #topbar .val{font-size:21px;font-weight:700;line-height:1.1}
+  #scoreUs{color:var(--amber)} #scoreThem{color:var(--teal)}
+  #timer.hot{color:var(--bad)}
+  #objective{margin-top:2px;font-size:11px;color:#d8d2c2;letter-spacing:.08em}
+
+  #vitals{position:absolute;left:22px;bottom:20px;padding:10px 16px 12px;min-width:230px}
+  #hpRow{display:flex;align-items:baseline;gap:10px}
+  #hp{font-size:34px;font-weight:800;line-height:1}
+  #armor{font-size:15px;color:var(--teal);font-weight:700}
+  #hpBarWrap{margin-top:7px;height:7px;background:rgba(255,255,255,.12);border-radius:3px;overflow:hidden}
+  #hpBar{height:100%;width:100%;background:linear-gradient(90deg,#e8b34b,#ffd98a);transition:width .15s}
+  #teamLine{margin-top:7px;font-size:12px;color:#b7b0a0;letter-spacing:.06em}
+
+  #gunbox{position:absolute;right:22px;bottom:20px;padding:10px 16px;text-align:right;min-width:210px}
+  #gunName{font-size:15px;font-weight:700;letter-spacing:.12em;color:#f0e9d8}
+  #ammo{font-size:32px;font-weight:800;line-height:1.05}
+  #ammo small{font-size:16px;color:#a49c8b;font-weight:600}
+  #money{font-size:16px;color:var(--good);font-weight:700}
+  #reloadTip{font-size:11px;color:var(--amber);letter-spacing:.14em;height:14px}
+
+  #killfeed{position:absolute;right:22px;top:76px;display:flex;flex-direction:column;gap:5px;align-items:flex-end}
+  .kf{padding:5px 11px;font-size:12.5px;border-radius:4px;background:rgba(8,10,13,.78);
+    border:1px solid rgba(255,255,255,.12);color:#ddd6c6}
+  .kf b.us{color:var(--amber)} .kf b.them{color:var(--teal)} .kf .wpn{color:#8f887a;margin:0 6px}
+
+  #banner{position:absolute;left:50%;top:27%;transform:translate(-50%,-50%);text-align:center;opacity:0;
+    transition:opacity .25s;z-index:30}
+  #banner .big{font-size:44px;font-weight:800;letter-spacing:.2em;text-shadow:0 3px 18px rgba(0,0,0,.8)}
+  #banner .small{margin-top:5px;font-size:15px;letter-spacing:.26em;color:#d8d2c2;text-transform:uppercase}
+  #banner.win .big{color:var(--amber)} #banner.lose .big{color:var(--teal)}
+  #interact{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);text-align:center}
+  #interact .lbl{font-size:13px;letter-spacing:.2em;color:#f0e9d8;text-shadow:0 1px 6px #000}
+  #interactBarWrap{margin:7px auto 0;width:210px;height:6px;background:rgba(255,255,255,.15);border-radius:3px;overflow:hidden}
+  #interactBar{height:100%;width:0%;background:var(--amber)}
+
+  /* ---------- buy menu ---------- */
+  #buy{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;padding:18px 20px 14px;z-index:35}
+  #buy h2{font-size:16px;letter-spacing:.24em;color:var(--amber);text-transform:uppercase}
+  #buy .clock{float:right;color:#d8d2c2;font-size:14px;letter-spacing:.1em}
+  .buyItem{display:flex;align-items:center;gap:12px;padding:9px 10px;margin-top:8px;border:1px solid rgba(255,255,255,.13);
+    border-radius:5px;background:rgba(255,255,255,.03)}
+  .buyItem .key{font-weight:800;color:#14100a;background:var(--amber);border-radius:4px;width:24px;height:24px;
+    display:flex;align-items:center;justify-content:center;font-size:13px}
+  .buyItem .nm{font-weight:700;letter-spacing:.05em}
+  .buyItem .ds{font-size:12px;color:#a49c8b}
+  .buyItem .pr{margin-left:auto;font-weight:700;color:var(--good)}
+  .buyItem.owned{opacity:.55} .buyItem.cant .pr{color:var(--bad)}
+  #buy .foot{margin-top:12px;font-size:12px;color:#9d968a;letter-spacing:.06em}
+
+  /* ---------- scoreboard ---------- */
+  #board{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:560px;padding:18px 22px;z-index:34}
+  #board h2{font-size:15px;letter-spacing:.24em;text-transform:uppercase;color:#f0e9d8;text-align:center}
+  #board table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13.5px}
+  #board th{font-size:10.5px;letter-spacing:.18em;color:#a49c8b;text-align:left;padding:4px 6px;text-transform:uppercase}
+  #board td{padding:4px 6px;border-top:1px solid rgba(255,255,255,.08)}
+  #board tr.me td{color:var(--amber);font-weight:700}
+  #board .teamLab{margin-top:12px;font-size:11px;letter-spacing:.22em;color:#a49c8b;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="title">
+  <h1>KESTREL <span>FOUNDRY</span></h1>
+  <div class="sub">Round-based tactical FPS</div>
+  <p class="blurb">Five Jackals against five Wardens in a derelict casting works. Plant the Charge at the
+     Furnace or the Depot — or stop the ones who do. Money buys steel between rounds;
+     a steady hand beats a fast one.</p>
+  <div class="keys">
+    <b>W A S D</b> move &nbsp; <b>Mouse</b> look &nbsp; <b>Click</b> fire &nbsp; <b>R</b> reload &nbsp;
+    <b>Shift</b> walk &nbsp; <b>Space</b> jump<br>
+    <b>B</b> buy menu &nbsp; <b>E</b> plant / defuse &nbsp; <b>1–3</b> weapons &nbsp; <b>Tab</b> scores
+  </div>
+  <button id="playBtn">DEPLOY</button>
+</div>
+
+<div id="hud" class="hidden">
+  <div id="dmgVin"></div>
+  <div id="crosshair"></div>
+  <div id="hitmarker"></div>
+  <div id="topbar">
+    <div class="cell"><div class="lab">Jackals</div><div class="val" id="scoreUs">0</div></div>
+    <div class="cell"><div class="lab" id="phaseLab">Buy phase</div><div class="val" id="timer">0:12</div>
+      <div id="objective">Plant the Charge at A or B</div></div>
+    <div class="cell"><div class="lab">Wardens</div><div class="val" id="scoreThem">0</div></div>
+  </div>
+  <div id="vitals" class="panel">
+    <div id="hpRow"><div id="hp">100</div><div id="armor">ARMOR 0</div></div>
+    <div id="hpBarWrap"><div id="hpBar"></div></div>
+    <div id="teamLine">Jackals alive: 5 · Wardens alive: 5</div>
+  </div>
+  <div id="gunbox" class="panel">
+    <div id="gunName">P9 SIDEARM</div>
+    <div id="ammo">12 <small>/ 48</small></div>
+    <div id="money">$800</div>
+    <div id="reloadTip"></div>
+  </div>
+  <div id="killfeed"></div>
+  <div id="banner"><div class="big"></div><div class="small"></div></div>
+  <div id="interact" class="hidden"><div class="lbl">HOLD E</div><div id="interactBarWrap"><div id="interactBar"></div></div></div>
+</div>
+
+<div id="buy" class="panel hidden">
+  <span class="clock" id="buyClock">0:12</span>
+  <h2>Buy — Jackal Issue</h2>
+  <div id="buyItems"></div>
+  <div class="foot">Press the number key or B to close. Purchases last while you live; a rifle drops for a teammate when you fall.</div>
+</div>
+
+<div id="board" class="panel hidden">
+  <h2>Kestrel Foundry — Scoreboard</h2>
+  <div class="teamLab">Jackals (attack)</div>
+  <table id="boardUs"><tr><th>Callsign</th><th>K</th><th>D</th><th>$</th><th>Status</th></tr></table>
+  <div class="teamLab">Wardens (defence)</div>
+  <table id="boardThem"><tr><th>Callsign</th><th>K</th><th>D</th><th>$</th><th>Status</th></tr></table>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three/three.module.min.js",
+  "three/addons/": "./vendor/three/"
+} }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
